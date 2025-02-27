@@ -1,10 +1,10 @@
 """
 This module is used to scrape and validate proxies.
+#TODO use async for http request
 """
 
-import requests
+import httpx
 import re
-import random
 import time
 import logging
 from multiprocessing import Pool
@@ -38,7 +38,7 @@ def retry(retries=3, delay=0.5):
             while attempts < retries:
                 try:
                     return func(*args, **kwargs)
-                except requests.exceptions.RequestException as e:
+                except httpx.exceptions.RequestException as e:
                     attempts += 1
                     if attempts >= retries:
                         raise e
@@ -59,16 +59,16 @@ def get_proxies():
     # Source 1: spys.me
     try:
         regex = r"[0-9]+(?:\.[0-9]+){3}:[0-9]+"
-        raw_proxy_str = requests.get("https://spys.me/proxy.txt", timeout=10).text
+        raw_proxy_str = httpx.get("https://spys.me/proxy.txt", timeout=10).text
         spys_proxies = re.findall(regex, raw_proxy_str)
         proxies.extend(spys_proxies)
         logger.debug(f"Found {len(spys_proxies)} proxies from spys.me")
-    except requests.exceptions.RequestException as e:
+    except httpx.exceptions.RequestException as e:
         logger.debug(f"Error fetching from spys.me: {e}")
 
     # Source 2: free-proxy-list.net
     try:
-        response = requests.get("https://free-proxy-list.net/", timeout=10)
+        response = httpx.get("https://free-proxy-list.net/", timeout=10)
         soup = BeautifulSoup(response.content, "html.parser")
         rows = soup.select(".fpl-list .table tbody tr")
 
@@ -82,7 +82,7 @@ def get_proxies():
 
         proxies.extend(fpl_proxies)
         logger.debug(f"Found {len(fpl_proxies)} proxies from free-proxy-list.net")
-    except requests.exceptions.RequestException as e:
+    except httpx.exceptions.RequestException as e:
         logger.debug(f"Error fetching from free-proxy-list.net: {e}")
 
     # Remove duplicates
@@ -107,7 +107,7 @@ def validate_proxy(proxy, test_url="https://linkedin.com", timeout=2):
     start_time = time.perf_counter()
 
     try:
-        r = requests.get(url=test_url, proxies=proxies, timeout=timeout)
+        r = httpx.get(url=test_url, proxies=proxies, timeout=timeout)
         end_time = time.perf_counter()
         response_time = end_time - start_time
 
@@ -138,13 +138,12 @@ def validate_proxies_worker(proxy):
     return None
 
 
-def validate_proxies(proxy_list, workers=10):
+def validate_proxies(proxy_list):
     """
     Validate a list of proxies in parallel
 
     Args:
         proxy_list: List of proxies to validate
-        workers: Number of parallel workers
 
     Returns:
         List of valid proxies
@@ -170,6 +169,6 @@ def validate_proxies(proxy_list, workers=10):
 if __name__ == "__main__":
 
     # Validate proxies
-    valid_proxies = validate_proxies(proxy_list=get_proxies(), workers=15)
+    valid_proxies = validate_proxies(proxy_list=get_proxies())
 
     logger.info("Validation complete. Results saved to verified_proxies.txt")
